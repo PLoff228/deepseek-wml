@@ -1,0 +1,57 @@
+﻿<?xml version="1.0"?>
+<!DOCTYPE wml PUBLIC "-//WAPFORUM//DTD WML 1.1//EN" "http://www.wapforum.org/DTD/wml_1.1.xml">
+<wml>
+  <card id="settings" title="Настройки">
+    <p align="center">
+      <b>Настройки DeepSeek</b>
+    </p>
+    <p>
+      Модель:<br/>
+      <select name="model">
+        <option value="deepseek-v4-flash" {{model_flash_checked}}>Flash</option>
+        <option value="deepseek-v4-pro" {{model_pro_checked}}>Pro</option>
+      </select>
+    </p>
+    <p>
+      Режим мышления:<br/>
+      <select name="thinking">
+        <option value="enabled" {{thinking_enabled_checked}}>Включен</option>
+        <option value="disabled" {{thinking_disabled_checked}}>Выключен</option>
+      </select>
+    </p>
+    <p>
+      Усилие рассуждения:<br/>
+      <select name="reasoning_effort">
+        <option value="high" {{reasoning_high_checked}}>High</option>
+        <option value="max" {{reasoning_max_checked}}>Max</option>
+      </select>
+    </p>
+    <p>
+      Температура (0-2):<br/>
+      <input name="temperature" type="text" value="{{temperature}}" format="*N"/>
+    </p>
+    <p>
+      Top-P (0-1):<br/>
+      <input name="top_p" type="text" value="{{top_p}}" format="*N"/>
+    </p>
+    <p>
+      Макс. токенов:<br/>
+      <input name="max_tokens" type="text" value="{{max_tokens}}" format="*N"/>
+    </p>
+    <p>
+      <anchor>Сохранить
+        <go href="/settings" method="post">
+          <postfield name="model" value="$(model)"/>
+          <postfield name="thinking" value="$(thinking)"/>
+          <postfield name="reasoning_effort" value="$(reasoning_effort)"/>
+          <postfield name="temperature" value="$(temperature)"/>
+          <postfield name="top_p" value="$(top_p)"/>
+          <postfield name="max_tokens" value="$(max_tokens)"/>
+        </go>
+      </anchor>
+    </p>
+    <p>
+      <a href="/index.wml">← Назад</a>
+    </p>
+  </card>
+</wml>
