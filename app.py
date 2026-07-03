@@ -6,7 +6,7 @@ DEEPSEEK_KEY = os.environ.get("DEEPSEEK_API_KEY")
 
 @app.route("/")
 def index():
-    return 'WML gateway for DeepSeek Ч работает'
+    return 'WML gateway for DeepSeek - working'
 
 @app.route("/ask", methods=["POST"])
 def ask():
