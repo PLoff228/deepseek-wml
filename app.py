@@ -1,13 +1,13 @@
-# -*- coding: utf-8 -*-
+п»ї# -*- coding: utf-8 -*-
 from flask import Flask, request
 import requests, os, json
 
 app = Flask(__name__)
 SETTINGS_FILE = 'settings.json'
 
-# Дефолтные настройки
+# Р”РµС„РѕР»С‚РЅС‹Рµ РЅР°СЃС‚СЂРѕР№РєРё
 DEFAULT_SETTINGS = {
-    'model': 'deepseek-chat',      # 'deepseek-chat' — старая, но стабильная модель
+    'model': 'deepseek-chat',      # 'deepseek-chat' вЂ” СЃС‚Р°СЂР°СЏ, РЅРѕ СЃС‚Р°Р±РёР»СЊРЅР°СЏ РјРѕРґРµР»СЊ
     'temperature': 1.0,
     'top_p': 1.0,
     'max_tokens': 500
@@ -28,11 +28,11 @@ def save_settings(settings):
 
 @app.route("/")
 def index():
-    # Страница-заглушка для браузеров ПК
+    # РЎС‚СЂР°РЅРёС†Р°-Р·Р°РіР»СѓС€РєР° РґР»СЏ Р±СЂР°СѓР·РµСЂРѕРІ РџРљ
     return '''
     <html>
     <body>
-        <p>Сервер работает. WML-интерфейс доступен по адресу:</p>
+        <p>РЎРµСЂРІРµСЂ СЂР°Р±РѕС‚Р°РµС‚. WML-РёРЅС‚РµСЂС„РµР№СЃ РґРѕСЃС‚СѓРїРµРЅ РїРѕ Р°РґСЂРµСЃСѓ:</p>
         <a href="/index.wml">/index.wml</a><br/>
         <a href="/settings.wml">/settings.wml</a>
     </body>
@@ -49,7 +49,7 @@ def wml_settings():
     settings = load_settings()
     with open('settings.template.wml', 'r') as f:
         template = f.read()
-    # Заменяем плейсхолдеры
+    # Р—Р°РјРµРЅСЏРµРј РїР»РµР№СЃС…РѕР»РґРµСЂС‹
     wml = template
     wml = wml.replace('{{model_chat_checked}}', 'checked' if settings['model'] == 'deepseek-chat' else '')
     wml = wml.replace('{{model_v4_flash_checked}}', 'checked' if settings['model'] == 'deepseek-v4-flash' else '')
@@ -75,10 +75,10 @@ def save_settings_route():
     <?xml version="1.0"?>
     <!DOCTYPE wml PUBLIC "-//WAPFORUM//DTD WML 1.1//EN" "http://www.wapforum.org/DTD/wml_1.1.xml">
     <wml>
-      <card id="saved" title="Сохранено">
+      <card id="saved" title="РЎРѕС…СЂР°РЅРµРЅРѕ">
         <p align="center">
-          <b>Настройки сохранены!</b><br/>
-          <a href="/index.wml">На главную</a>
+          <b>РќР°СЃС‚СЂРѕР№РєРё СЃРѕС…СЂР°РЅРµРЅС‹!</b><br/>
+          <a href="/index.wml">РќР° РіР»Р°РІРЅСѓСЋ</a>
         </p>
       </card>
     </wml>
@@ -88,11 +88,11 @@ def save_settings_route():
 def ask():
     text = request.form.get("text", "")
     if not text:
-        return "Ошибка: нет текста", 400
+        return "РћС€РёР±РєР°: РЅРµС‚ С‚РµРєСЃС‚Р°", 400
 
     DEEPSEEK_KEY = os.environ.get("DEEPSEEK_API_KEY")
     if not DEEPSEEK_KEY:
-        return "Ошибка: API ключ не настроен", 500
+        return "РћС€РёР±РєР°: API РєР»СЋС‡ РЅРµ РЅР°СЃС‚СЂРѕРµРЅ", 500
 
     settings = load_settings()
     headers = {
@@ -110,46 +110,46 @@ def ask():
     try:
         resp = requests.post("https://api.deepseek.com/chat/completions", headers=headers, json=data, timeout=30)
         if resp.status_code == 200:
-            answer = resp.json().get("choices", [{}])[0].get("message", {}).get("content", "Нет ответа")
-            # Экранируем для WML
+            answer = resp.json().get("choices", [{}])[0].get("message", {}).get("content", "РќРµС‚ РѕС‚РІРµС‚Р°")
+            # Р­РєСЂР°РЅРёСЂСѓРµРј РґР»СЏ WML
             answer = answer.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
             return f'''
             <?xml version="1.0"?>
             <!DOCTYPE wml PUBLIC "-//WAPFORUM//DTD WML 1.1//EN" "http://www.wapforum.org/DTD/wml_1.1.xml">
             <wml>
-              <card id="answer" title="Ответ">
+              <card id="answer" title="РћС‚РІРµС‚">
                 <p align="left">
                   <b>DeepSeek:</b><br/>
                   {answer}
                 </p>
                 <p>
-                  <a href="/index.wml">Новый вопрос</a>
+                  <a href="/index.wml">РќРѕРІС‹Р№ РІРѕРїСЂРѕСЃ</a>
                 </p>
               </card>
             </wml>
             ''', 200, {'Content-Type': 'text/vnd.wap.wml'}
         else:
-            error_text = f"Ошибка API: {resp.status_code} - {resp.text}"
+            error_text = f"РћС€РёР±РєР° API: {resp.status_code} - {resp.text}"
             return f'''
             <?xml version="1.0"?>
             <!DOCTYPE wml PUBLIC "-//WAPFORUM//DTD WML 1.1//EN" "http://www.wapforum.org/DTD/wml_1.1.xml">
             <wml>
-              <card id="error" title="Ошибка">
+              <card id="error" title="РћС€РёР±РєР°">
                 <p align="center">
-                  <b>Ошибка</b><br/>
+                  <b>РћС€РёР±РєР°</b><br/>
                   {error_text}<br/>
-                  <a href="/index.wml">Назад</a>
+                  <a href="/index.wml">РќР°Р·Р°Рґ</a>
                 </p>
               </card>
             </wml>
             ''', 200, {'Content-Type': 'text/vnd.wap.wml'}
     except Exception as e:
-        return f"Ошибка сервера: {str(e)}", 500
+        return f"РћС€РёР±РєР° СЃРµСЂРІРµСЂР°: {str(e)}", 500
 
-# Обработчик ошибок для отображения текста вместо HTML-страницы
+# РћР±СЂР°Р±РѕС‚С‡РёРє РѕС€РёР±РѕРє РґР»СЏ РѕС‚РѕР±СЂР°Р¶РµРЅРёСЏ С‚РµРєСЃС‚Р° РІРјРµСЃС‚Рѕ HTML-СЃС‚СЂР°РЅРёС†С‹
 @app.errorhandler(Exception)
 def handle_exception(e):
-    return f"Ошибка на сервере: {str(e)}", 500
+    return f"РћС€РёР±РєР° РЅР° СЃРµСЂРІРµСЂРµ: {str(e)}", 500
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
