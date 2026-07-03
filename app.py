@@ -12,8 +12,8 @@ def index():
 def ask():
     text = request.form.get("text", "")
     if not text:
-        return "Ошибка: нет текста"
+        return "Error: no text"
     headers = {"Authorization": f"Bearer {DEEPSEEK_KEY}", "Content-Type": "application/json"}
     data = {"model": "deepseek-chat", "messages": [{"role": "user", "content": text}]}
     resp = requests.post("https://api.deepseek.com/chat/completions", headers=headers, json=data)
-    return resp.json().get("choices", [{}])[0].get("message", {}).get("content", "Ошибка API")
+    return resp.json().get("choices", [{}])[0].get("message", {}).get("content", "API error")
