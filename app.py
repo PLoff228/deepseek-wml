@@ -18,3 +18,6 @@ def ask():
     data = {"model": "deepseek-chat", "messages": [{"role": "user", "content": text}]}
     resp = requests.post("https://api.deepseek.com/chat/completions", headers=headers, json=data)
     return resp.json().get("choices", [{}])[0].get("message", {}).get("content", "API error")
+@app.route('/health')
+def health():
+    return 'OK', 200
