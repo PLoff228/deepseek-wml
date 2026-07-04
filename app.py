@@ -21,7 +21,7 @@ def load_data():
             "user": {
                 "chats": [],
                 "global_settings": {
-                    "model": "deepseek-chat",
+                    "model": "deepseek-v4-flash",
                     "temperature": 1.0,
                     "max_tokens": 500,
                     "system_prompt": "Ты — полезный ассистент. Отвечай на русском языке."
@@ -52,10 +52,12 @@ def get_chat(chat_id):
 def create_chat(name=None):
     user = get_user_data()
     gs = user["global_settings"]
+    chat_num = len(user["chats"]) + 1
+    chat_name = name or f"Чат {chat_num}"
     chat_id = "chat_" + str(uuid.uuid4())[:8]
     new_chat = {
         "id": chat_id,
-        "name": name or "Новый чат",
+        "name": chat_name,
         "messages": [],
         "settings": {
             "model": gs["model"],
@@ -78,7 +80,6 @@ def login_required(f):
 
 # ---------- Универсальный рендерер и хелпер для ссылок ----------
 def make_link(url, html_mode):
-    """Добавляет ?html=1 к ссылке, если включён HTML-режим"""
     if not html_mode:
         return url
     if '?' in url:
@@ -199,7 +200,7 @@ def wml_index():
         <p align="center">
             <b>DeepSeek</b><br/>
             Привет, {user}!<br/>
-            <a href="{make_link('/new_chat', html_mode)}">Новый чат</a><br/>
+            <a href="{make_link('/new_chat', html_mode)}">Создать новый чат</a><br/>
             <a href="{make_link('/chats.wml', html_mode)}">Чаты</a><br/>
             <a href="{make_link('/settings.wml', html_mode)}">Настройки</a><br/>
             <a href="{make_link('/logout', html_mode)}">Выйти</a>
@@ -213,7 +214,7 @@ def wml_chats():
     html_mode = 'html' in request.args
     user = get_user_data()
     chats = user["chats"]
-    content = f'<p><a href="{make_link("/new_chat", html_mode)}">[Новый чат]</a></p>'
+    content = f'<p><a href="{make_link("/new_chat", html_mode)}">[Создать новый чат]</a></p>'
     if not chats:
         content += '<p>Нет чатов. Создайте первый!</p>'
     else:
@@ -345,7 +346,7 @@ def send_message():
         "Content-Type": "application/json"
     }
     data = {
-        "model": settings.get("model", "deepseek-chat"),
+        "model": settings.get("model", "deepseek-v4-flash"),
         "messages": messages_for_api,
         "max_tokens": settings.get("max_tokens", 500),
         "temperature": settings.get("temperature", 1.0),
@@ -387,8 +388,8 @@ def wml_chat_settings():
                 <p>Имя чата: <input name="chat_name" type="text" value="{chat['name']}"/></p>
                 <p>Модель: 
                     <select name="model">
-                        <option value="deepseek-chat" {"selected" if s['model']=='deepseek-chat' else ""}>deepseek-chat</option>
-                        <option value="deepseek-v4-flash" {"selected" if s['model']=='deepseek-v4-flash' else ""}>deepseek-v4-flash</option>
+                        <option value="deepseek-v4-flash" {"selected" if s['model']=='deepseek-v4-flash' else ""}>V4 Flash</option>
+                        <option value="deepseek-v4-pro" {"selected" if s['model']=='deepseek-v4-pro' else ""}>V4 Pro</option>
                     </select>
                 </p>
                 <p>Температура (0-2): <input name="temperature" type="text" value="{s['temperature']}"/></p>
@@ -416,8 +417,8 @@ def wml_chat_settings():
             <p>
                 Модель:<br/>
                 <select name="model">
-                    <option value="deepseek-chat" {"(selected)" if s['model']=='deepseek-chat' else ""}>deepseek-chat</option>
-                    <option value="deepseek-v4-flash" {"(selected)" if s['model']=='deepseek-v4-flash' else ""}>deepseek-v4-flash</option>
+                    <option value="deepseek-v4-flash" {"(selected)" if s['model']=='deepseek-v4-flash' else ""}>V4 Flash</option>
+                    <option value="deepseek-v4-pro" {"(selected)" if s['model']=='deepseek-v4-pro' else ""}>V4 Pro</option>
                 </select>
             </p>
             <p>
@@ -458,7 +459,7 @@ def wml_chat_settings():
 @login_required
 def save_chat_settings():
     chat_id = request.form.get('chat_id')
-    model = request.form.get('model', 'deepseek-chat')
+    model = request.form.get('model', 'deepseek-v4-flash')
     temperature = float(request.form.get('temperature', 1.0))
     max_tokens = int(request.form.get('max_tokens', 500))
     system_prompt = request.form.get('system_prompt', 'Ты — полезный ассистент.')
@@ -517,8 +518,8 @@ def wml_settings():
             <form method="post" action="{make_link('/settings', html_mode)}">
                 <p>Модель по умолчанию:
                     <select name="model">
-                        <option value="deepseek-chat" {"selected" if gs['model']=='deepseek-chat' else ""}>deepseek-chat</option>
-                        <option value="deepseek-v4-flash" {"selected" if gs['model']=='deepseek-v4-flash' else ""}>deepseek-v4-flash</option>
+                        <option value="deepseek-v4-flash" {"selected" if gs['model']=='deepseek-v4-flash' else ""}>V4 Flash</option>
+                        <option value="deepseek-v4-pro" {"selected" if gs['model']=='deepseek-v4-pro' else ""}>V4 Pro</option>
                     </select>
                 </p>
                 <p>Температура (0-2): <input name="temperature" type="text" value="{gs['temperature']}"/></p>
@@ -536,8 +537,8 @@ def wml_settings():
             <p>
                 Модель по умолчанию:<br/>
                 <select name="model">
-                    <option value="deepseek-chat" {"(selected)" if gs['model']=='deepseek-chat' else ""}>deepseek-chat</option>
-                    <option value="deepseek-v4-flash" {"(selected)" if gs['model']=='deepseek-v4-flash' else ""}>deepseek-v4-flash</option>
+                    <option value="deepseek-v4-flash" {"(selected)" if gs['model']=='deepseek-v4-flash' else ""}>V4 Flash</option>
+                    <option value="deepseek-v4-pro" {"(selected)" if gs['model']=='deepseek-v4-pro' else ""}>V4 Pro</option>
                 </select>
             </p>
             <p>
@@ -576,7 +577,7 @@ def wml_settings():
 @app.route("/settings", methods=['POST'])
 @login_required
 def save_settings():
-    model = request.form.get('model', 'deepseek-chat')
+    model = request.form.get('model', 'deepseek-v4-flash')
     temperature = float(request.form.get('temperature', 1.0))
     max_tokens = int(request.form.get('max_tokens', 500))
     system_prompt = request.form.get('system_prompt', 'Ты — полезный ассистент.')
@@ -600,7 +601,7 @@ def reset_data():
             "user": {
                 "chats": [],
                 "global_settings": {
-                    "model": "deepseek-chat",
+                    "model": "deepseek-v4-flash",
                     "temperature": 1.0,
                     "max_tokens": 500,
                     "system_prompt": "Ты — полезный ассистент. Отвечай на русском языке."
