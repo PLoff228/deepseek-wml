@@ -1,5 +1,5 @@
 ﻿# -*- coding: utf-8 -*-
-from flask import Flask, request, redirect, session, url_for
+from flask import Flask, request, redirect, session
 import requests, os, json, uuid
 from datetime import timedelta
 
@@ -31,33 +31,31 @@ def load_data():
 
 def save_data(data):
     with open(DATA_FILE, 'w') as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+        json.dump(data, f, ensure_ascii=False, separators=(',', ':'))
 
 def get_user_data():
-    data = load_data()
-    return data["user"]
+    return load_data()["user"]
 
 def save_user_data(user_data):
-    data = load_data()
-    data["user"] = user_data
-    save_data(data)
+    d = load_data()
+    d["user"] = user_data
+    save_data(d)
 
 def get_chat(chat_id):
     user = get_user_data()
-    for chat in user["chats"]:
-        if chat["id"] == chat_id:
-            return chat
+    for c in user["chats"]:
+        if c["id"] == chat_id:
+            return c
     return None
 
 def create_chat(name=None):
     user = get_user_data()
     gs = user["global_settings"]
-    chat_num = len(user["chats"]) + 1
-    chat_name = name or f"Чат {chat_num}"
-    chat_id = "chat_" + str(uuid.uuid4())[:8]
-    new_chat = {
-        "id": chat_id,
-        "name": chat_name,
+    num = len(user["chats"]) + 1
+    cid = "chat_" + str(uuid.uuid4())[:8]
+    new = {
+        "id": cid,
+        "name": name or f"Чат {num}",
         "messages": [],
         "settings": {
             "model": gs["model"],
@@ -66,9 +64,9 @@ def create_chat(name=None):
             "system_prompt": gs["system_prompt"]
         }
     }
-    user["chats"].insert(0, new_chat)
+    user["chats"].insert(0, new)
     save_user_data(user)
-    return chat_id
+    return cid
 
 def login_required(f):
     def wrapper(*args, **kwargs):
@@ -78,526 +76,280 @@ def login_required(f):
     wrapper.__name__ = f.__name__
     return wrapper
 
-# ---------- Универсальный рендерер и хелпер для ссылок ----------
-def make_link(url, html_mode):
-    if not html_mode:
-        return url
-    if '?' in url:
-        return url + '&html=1'
-    else:
-        return url + '?html=1'
-
-def render_page(content, title, html_mode=False):
-    if html_mode:
-        return f'''<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>{title}</title>
-    <style>
-        body {{ font-family: sans-serif; max-width: 600px; margin: auto; padding: 10px; background: #f4f4f4; }}
-        .card {{ background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }}
-        input, button {{ padding: 8px; margin: 5px 0; width: 100%; box-sizing: border-box; }}
-        button {{ background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }}
-        a {{ color: #007bff; text-decoration: none; display: inline-block; margin: 5px 0; }}
-        .nav {{ text-align: center; margin: 10px 0; }}
-        .nav a {{ margin: 0 5px; }}
-        hr {{ margin: 15px 0; }}
-        .message {{ border-bottom: 1px solid #ddd; padding: 5px 0; }}
-    </style>
-</head>
-<body>
-    <div class="card">
-        <h2>{title}</h2>
-        {content}
-    </div>
-</body>
-</html>
-''', 200, {'Content-Type': 'text/html'}
-    else:
-        return f'''<?xml version="1.0"?>
-<!DOCTYPE wml PUBLIC "-//WAPFORUM//DTD WML 1.1//EN" "http://www.wapforum.org/DTD/wml_1.1.xml">
-<wml>
-  <card id="main" title="{title}">
-    {content}
-  </card>
-</wml>
-''', 200, {'Content-Type': 'text/vnd.wap.wml'}
-
-# ---------- Открытые страницы ----------
+# ---------- Роуты ----------
 @app.route("/")
 def index():
-    return '''
-    <html><body>
-        <h1>DeepSeek WML</h1>
-        <p><a href="/index.wml">Главная (WML)</a></p>
-        <p><a href="/chats.wml">Чаты</a></p>
-        <p><a href="/settings.wml">Настройки</a></p>
-    </body></html>
-    '''
+    return '<html><body><a href="/login.wml">WML версия</a></body></html>'
 
-@app.route("/login.wml")
-def login_page():
-    html_mode = 'html' in request.args
-    if html_mode:
-        content = '''
-            <form method="post" action="/login">
-                <p>Логин: <input name="login" type="text"/></p>
-                <p>Пароль: <input name="password" type="text"/></p>
-                <button type="submit">Войти</button>
-            </form>
-        '''
-    else:
-        content = '''
-            <p align="center">
-                <b>Вход в систему</b><br/>
-                Логин:<br/>
-                <input name="login" type="text" emptyok="false" format="*M"/><br/>
-                Пароль:<br/>
-                <input name="password" type="text" emptyok="false" format="*M"/><br/>
-                <anchor>Войти
-                    <go href="/login" method="post">
-                        <postfield name="login" value="$(login)"/>
-                        <postfield name="password" value="$(password)"/>
-                    </go>
-                </anchor>
-            </p>
-        '''
-    return render_page(content, "Вход", html_mode)
-
-@app.route("/login", methods=['POST'])
+# ----- Вход / выход -----
+@app.route("/login.wml", methods=['GET', 'POST'])
 def login():
-    login = request.form.get('login', '')
-    password = request.form.get('password', '')
-    if login == ADMIN_LOGIN and password == ADMIN_PASSWORD:
-        session.permanent = True
-        session["logged_in"] = True
-        session["user"] = login
-        return redirect("/index.wml" + ('?html=1' if 'html' in request.args else ''))
+    if request.method == 'POST':
+        login = request.form.get('login', '')
+        password = request.form.get('password', '')
+        if login == ADMIN_LOGIN and password == ADMIN_PASSWORD:
+            session.permanent = True
+            session["logged_in"] = True
+            session["user"] = login
+            return redirect("/index.wml")
+        else:
+            return '''<?xml version="1.0"?>
+<!DOCTYPE wml PUBLIC "-//WAPFORUM//DTD WML 1.1//EN" "http://www.wapforum.org/DTD/wml_1.1.xml">
+<wml><card id="err" title="Ошибка"><p align="center"><b>Неверный логин или пароль</b><br/><a href="/login.wml">Попробовать снова</a></p></card></wml>''', 200, {'Content-Type': 'text/vnd.wap.wml'}
     else:
-        html_mode = 'html' in request.args
-        content = f'''
-            <p align="center">
-                <b>Неверный логин или пароль</b><br/>
-                <a href="{make_link('/login.wml', html_mode)}">Попробовать снова</a>
-            </p>
-        '''
-        return render_page(content, "Ошибка", html_mode)
+        return '''<?xml version="1.0"?>
+<!DOCTYPE wml PUBLIC "-//WAPFORUM//DTD WML 1.1//EN" "http://www.wapforum.org/DTD/wml_1.1.xml">
+<wml><card id="login" title="Вход"><p align="center"><b>Вход</b><br/>Логин:<br/><input name="login" type="text"/><br/>Пароль:<br/><input name="password" type="text"/><br/><anchor>Войти<go href="/login.wml" method="post"><postfield name="login" value="$(login)"/><postfield name="password" value="$(password)"/></go></anchor></p></card></wml>''', 200, {'Content-Type': 'text/vnd.wap.wml'}
 
 @app.route("/logout")
 def logout():
     session.clear()
-    html_mode = 'html' in request.args
-    return redirect(make_link('/login.wml', html_mode))
+    return redirect("/login.wml")
 
-# ---------- Защищённые страницы ----------
+# ----- Главная -----
 @app.route("/index.wml")
 @login_required
-def wml_index():
-    html_mode = 'html' in request.args
+def index_wml():
     user = session.get("user", "Гость")
-    content = f'''
-        <p align="center">
-            <b>DeepSeek</b><br/>
-            Привет, {user}!<br/>
-            <a href="{make_link('/new_chat', html_mode)}">Создать новый чат</a><br/>
-            <a href="{make_link('/chats.wml', html_mode)}">Чаты</a><br/>
-            <a href="{make_link('/settings.wml', html_mode)}">Настройки</a><br/>
-            <a href="{make_link('/logout', html_mode)}">Выйти</a>
-        </p>
-    '''
-    return render_page(content, "DeepSeek", html_mode)
+    return f'''<?xml version="1.0"?>
+<!DOCTYPE wml PUBLIC "-//WAPFORUM//DTD WML 1.1//EN" "http://www.wapforum.org/DTD/wml_1.1.xml">
+<wml><card id="main" title="DeepSeek"><p align="center"><b>DeepSeek</b><br/>Привет, {user}!<br/><a href="/new_chat">Создать новый чат</a><br/><a href="/chats.wml">Чаты</a><br/><a href="/settings.wml">Настройки</a><br/><a href="/logout">Выйти</a></p></card></wml>''', 200, {'Content-Type': 'text/vnd.wap.wml'}
 
+# ----- Чаты -----
 @app.route("/chats.wml")
 @login_required
-def wml_chats():
-    html_mode = 'html' in request.args
+def chats():
     user = get_user_data()
     chats = user["chats"]
-    content = f'<p><a href="{make_link("/new_chat", html_mode)}">[Создать новый чат]</a></p>'
+    out = '''<?xml version="1.0"?>
+<!DOCTYPE wml PUBLIC "-//WAPFORUM//DTD WML 1.1//EN" "http://www.wapforum.org/DTD/wml_1.1.xml">
+<wml><card id="chats" title="Чаты"><p>'''
+    out += '<a href="/new_chat">[Создать новый чат]</a><br/>'
     if not chats:
-        content += '<p>Нет чатов. Создайте первый!</p>'
+        out += 'Нет чатов.<br/>'
     else:
-        last = chats[0]
-        content += f'<p><a href="{make_link(f"/chat.wml?id={last["id"]}&page=1", html_mode)}">Последний чат ({last["name"]})</a></p>'
-        for chat in chats[1:]:
-            content += f'<p><a href="{make_link(f"/chat.wml?id={chat["id"]}&page=1", html_mode)}">{chat["name"]}</a></p>'
-    content += f'<p><a href="{make_link("/index.wml", html_mode)}">Главная</a></p>'
-    return render_page(content, "Чаты", html_mode)
+        out += f'<a href="/chat.wml?id={chats[0]["id"]}&page=1">Последний чат ({chats[0]["name"]})</a><br/>'
+        for c in chats[1:]:
+            out += f'<a href="/chat.wml?id={c["id"]}&page=1">{c["name"]}</a><br/>'
+    out += '<a href="/index.wml">Главная</a>'
+    out += '</p></card></wml>'
+    return out, 200, {'Content-Type': 'text/vnd.wap.wml'}
 
 @app.route("/new_chat")
 @login_required
 def new_chat():
-    chat_id = create_chat()
-    html_mode = 'html' in request.args
-    return redirect(make_link(f'/chat.wml?id={chat_id}&page=1', html_mode))
+    cid = create_chat()
+    return redirect(f'/chat.wml?id={cid}&page=1')
 
+# ----- Чат -----
 @app.route("/chat.wml")
 @login_required
-def wml_chat():
-    html_mode = 'html' in request.args
-    chat_id = request.args.get('id')
+def chat():
+    cid = request.args.get('id')
     page = int(request.args.get('page', 1))
-    if not chat_id:
-        return redirect(make_link('/chats.wml', html_mode))
-    chat = get_chat(chat_id)
+    if not cid:
+        return redirect('/chats.wml')
+    chat = get_chat(cid)
     if not chat:
-        return redirect(make_link('/chats.wml', html_mode))
+        return redirect('/chats.wml')
     
     messages = chat["messages"]
-    total_msgs = len(messages)
+    total = len(messages)
     per_page = 10
-    total_pages = max(1, (total_msgs + per_page - 1) // per_page)
-    if page < 1:
-        page = 1
-    elif page > total_pages:
-        page = total_pages
-    
+    pages = max(1, (total + per_page - 1)//per_page)
+    if page < 1: page = 1
+    elif page > pages: page = pages
     start = (page - 1) * per_page
-    end = min(start + per_page, total_msgs)
+    end = min(start + per_page, total)
     page_msgs = messages[start:end]
     
+    # Навигация
     nav = ''
-    if total_pages > 1:
+    if pages > 1:
         nav += '<p align="center">'
         if page > 1:
-            nav += f'<a href="{make_link(f"/chat.wml?id={chat_id}&page=1", html_mode)}"><<</a> '
-            nav += f'<a href="{make_link(f"/chat.wml?id={chat_id}&page={page-1}", html_mode)}"><</a> '
+            nav += f'<a href="/chat.wml?id={cid}&page=1"><<</a> '
+            nav += f'<a href="/chat.wml?id={cid}&page={page-1}"><</a> '
         nav += f'[{page}] '
-        if page < total_pages:
-            nav += f'<a href="{make_link(f"/chat.wml?id={chat_id}&page={page+1}", html_mode)}">></a> '
-            nav += f'<a href="{make_link(f"/chat.wml?id={chat_id}&page={total_pages}", html_mode)}">>></a>'
+        if page < pages:
+            nav += f'<a href="/chat.wml?id={cid}&page={page+1}">></a> '
+            nav += f'<a href="/chat.wml?id={cid}&page={pages}">>></a>'
         nav += '</p>'
     
+    # Сообщения
     msg_html = ''
     if not page_msgs:
         msg_html = 'Нет сообщений.'
     else:
-        for msg in page_msgs:
-            role = "User" if msg["role"] == "user" else "AI"
-            text = msg["content"].replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-            msg_html += f'{role}: {text}<br/>'
+        for m in page_msgs:
+            role = "User" if m["role"]=="user" else "AI"
+            txt = m["content"].replace('&','&amp;').replace('<','&lt;').replace('>','&gt;')
+            msg_html += f'{role}: {txt}<br/>'
     
-    if html_mode:
-        form = f'''
-            <form method="post" action="{make_link('/chat/send', html_mode)}">
-                <input type="hidden" name="chat_id" value="{chat_id}"/>
-                <input name="message" type="text" placeholder="Введите сообщение..."/>
-                <button type="submit">Отправить</button>
-            </form>
-        '''
-    else:
-        form = f'''
-            <input name="message" type="text" emptyok="false" format="*M"/>
-            <anchor>Отправить
-                <go href="{make_link('/chat/send', html_mode)}" method="post">
-                    <postfield name="chat_id" value="{chat_id}"/>
-                    <postfield name="message" value="$(message)"/>
-                </go>
-            </anchor>
-        '''
+    # Форма
+    form = f'<input name="message" type="text"/><anchor>Отправить<go href="/chat/send" method="post"><postfield name="chat_id" value="{cid}"/><postfield name="message" value="$(message)"/></go></anchor>'
     
-    content = f'''
-        {nav}
-        <p>{msg_html}</p>
-        <p>{form}</p>
-        <p>
-            <a href="{make_link(f'/chat_settings.wml?id={chat_id}', html_mode)}">[Настройки чата]</a>
-            <a href="{make_link('/chats.wml', html_mode)}">[Список чатов]</a>
-            <a href="{make_link('/index.wml', html_mode)}">[Главная]</a>
-        </p>
-        {nav}
-    '''
-    return render_page(content, chat['name'], html_mode)
+    content = f'{nav}<p>{msg_html}</p><p>{form}</p><p><a href="/chat_settings.wml?id={cid}">[Настройки]</a> <a href="/chats.wml">[Список]</a> <a href="/index.wml">[Главная]</a></p>{nav}'
+    
+    return f'''<?xml version="1.0"?>
+<!DOCTYPE wml PUBLIC "-//WAPFORUM//DTD WML 1.1//EN" "http://www.wapforum.org/DTD/wml_1.1.xml">
+<wml><card id="chat" title="{chat["name"]}">{content}</card></wml>''', 200, {'Content-Type': 'text/vnd.wap.wml'}
 
 @app.route("/chat/send", methods=['POST'])
 @login_required
-def send_message():
-    chat_id = request.form.get('chat_id')
-    message = request.form.get('message', '').strip()
-    if not chat_id or not message:
+def send():
+    cid = request.form.get('chat_id')
+    msg = request.form.get('message', '').strip()
+    if not cid or not msg:
         return redirect('/chats.wml')
-    
-    user = get_user_data()
-    chat = get_chat(chat_id)
+    chat = get_chat(cid)
     if not chat:
         return redirect('/chats.wml')
     
-    chat["messages"].append({"role": "user", "content": message})
+    chat["messages"].append({"role": "user", "content": msg})
     
     DEEPSEEK_KEY = os.environ.get("DEEPSEEK_API_KEY")
     if not DEEPSEEK_KEY:
-        chat["messages"].append({"role": "assistant", "content": "Ошибка: API ключ не настроен"})
-        save_user_data(user)
+        chat["messages"].append({"role": "assistant", "content": "API ключ не настроен"})
+        save_user_data(get_user_data())
         total = len(chat["messages"])
-        last_page = (total + 9) // 10
-        html_mode = 'html' in request.args
-        return redirect(make_link(f'/chat.wml?id={chat_id}&page={last_page}', html_mode))
+        return redirect(f'/chat.wml?id={cid}&page={(total+9)//10}')
     
     settings = chat["settings"]
-    system_prompt = settings.get("system_prompt", "Ты — полезный ассистент.")
+    sys_prompt = settings.get("system_prompt", "Ты — полезный ассистент.")
     
-    messages_for_api = [{"role": "system", "content": system_prompt}]
+    # Берём последние 20 сообщений + системный промпт
+    history = [{"role": "system", "content": sys_prompt}]
     for m in chat["messages"][-20:]:
-        messages_for_api.append(m)
+        history.append(m)
     
-    headers = {
-        "Authorization": f"Bearer {DEEPSEEK_KEY}",
-        "Content-Type": "application/json"
-    }
-    data = {
+    headers = {"Authorization": f"Bearer {DEEPSEEK_KEY}", "Content-Type": "application/json"}
+    payload = {
         "model": settings.get("model", "deepseek-v4-flash"),
-        "messages": messages_for_api,
+        "messages": history,
         "max_tokens": settings.get("max_tokens", 500),
         "temperature": settings.get("temperature", 1.0),
         "top_p": 1.0
     }
-    
     try:
-        resp = requests.post("https://api.deepseek.com/chat/completions", headers=headers, json=data, timeout=30)
-        if resp.status_code == 200:
-            answer = resp.json().get("choices", [{}])[0].get("message", {}).get("content", "Нет ответа")
+        r = requests.post("https://api.deepseek.com/chat/completions", headers=headers, json=payload, timeout=15)
+        if r.status_code == 200:
+            ans = r.json().get("choices", [{}])[0].get("message", {}).get("content", "Нет ответа")
         else:
-            answer = f"Ошибка API: {resp.status_code}"
+            ans = f"Ошибка API: {r.status_code}"
     except Exception as e:
-        answer = f"Ошибка сервера: {str(e)}"
+        ans = f"Ошибка: {str(e)}"
     
-    chat["messages"].append({"role": "assistant", "content": answer})
-    save_user_data(user)
+    chat["messages"].append({"role": "assistant", "content": ans})
+    save_user_data(get_user_data())
     total = len(chat["messages"])
-    last_page = (total + 9) // 10
-    html_mode = 'html' in request.args
-    return redirect(make_link(f'/chat.wml?id={chat_id}&page={last_page}', html_mode))
+    return redirect(f'/chat.wml?id={cid}&page={(total+9)//10}')
 
-@app.route("/chat_settings.wml")
+# ----- Настройки чата -----
+@app.route("/chat_settings.wml", methods=['GET', 'POST'])
 @login_required
-def wml_chat_settings():
-    html_mode = 'html' in request.args
-    chat_id = request.args.get('id')
-    if not chat_id:
-        return redirect(make_link('/chats.wml', html_mode))
-    chat = get_chat(chat_id)
-    if not chat:
-        return redirect(make_link('/chats.wml', html_mode))
-    
-    s = chat["settings"]
-    if html_mode:
-        form = f'''
-            <form method="post" action="{make_link('/chat_settings', html_mode)}">
-                <input type="hidden" name="chat_id" value="{chat_id}"/>
-                <p>Имя чата: <input name="chat_name" type="text" value="{chat['name']}"/></p>
-                <p>Модель: 
-                    <select name="model">
-                        <option value="deepseek-v4-flash" {"selected" if s['model']=='deepseek-v4-flash' else ""}>V4 Flash</option>
-                        <option value="deepseek-v4-pro" {"selected" if s['model']=='deepseek-v4-pro' else ""}>V4 Pro</option>
-                    </select>
-                </p>
-                <p>Температура (0-2): <input name="temperature" type="text" value="{s['temperature']}"/></p>
-                <p>Макс. токенов: <input name="max_tokens" type="text" value="{s['max_tokens']}"/></p>
-                <p>Системный промпт: <input name="system_prompt" type="text" value="{s['system_prompt']}"/></p>
-                <button type="submit">Сохранить настройки</button>
-            </form>
-            <form method="post" action="{make_link('/delete_chat', html_mode)}" style="margin-top:10px;">
-                <input type="hidden" name="chat_id" value="{chat_id}"/>
-                <button type="submit" style="background:red;">Удалить чат</button>
-            </form>
-        '''
+def chat_settings():
+    if request.method == 'POST':
+        cid = request.form.get('chat_id')
+        model = request.form.get('model', 'deepseek-v4-flash')
+        temp = float(request.form.get('temperature', 1.0))
+        max_tok = int(request.form.get('max_tokens', 500))
+        sys_prompt = request.form.get('system_prompt', 'Ты — полезный ассистент.')
+        chat = get_chat(cid)
+        if chat:
+            chat["settings"] = {
+                "model": model,
+                "temperature": temp,
+                "max_tokens": max_tok,
+                "system_prompt": sys_prompt
+            }
+            save_user_data(get_user_data())
+            return redirect(f'/chat.wml?id={cid}&page=1')
+        else:
+            return redirect('/chats.wml')
     else:
-        form = f'''
-            <p>
-                <b>Имя чата:</b><br/>
-                <input name="chat_name" type="text" value="{chat['name']}" format="*M"/>
-                <anchor>Переименовать
-                    <go href="{make_link('/rename_chat', html_mode)}" method="post">
-                        <postfield name="chat_id" value="{chat_id}"/>
-                        <postfield name="new_name" value="$(chat_name)"/>
-                    </go>
-                </anchor>
-            </p>
-            <p>
-                Модель:<br/>
-                <select name="model">
-                    <option value="deepseek-v4-flash" {"(selected)" if s['model']=='deepseek-v4-flash' else ""}>V4 Flash</option>
-                    <option value="deepseek-v4-pro" {"(selected)" if s['model']=='deepseek-v4-pro' else ""}>V4 Pro</option>
-                </select>
-            </p>
-            <p>
-                Температура (0-2):<br/>
-                <input name="temperature" type="text" value="{s['temperature']}" format="*N"/>
-            </p>
-            <p>
-                Макс. токенов:<br/>
-                <input name="max_tokens" type="text" value="{s['max_tokens']}" format="*N"/>
-            </p>
-            <p>
-                Системный промпт:<br/>
-                <input name="system_prompt" type="text" value="{s['system_prompt']}" format="*M"/>
-            </p>
-            <p>
-                <anchor>Сохранить настройки
-                    <go href="{make_link('/chat_settings', html_mode)}" method="post">
-                        <postfield name="chat_id" value="{chat_id}"/>
-                        <postfield name="model" value="$(model)"/>
-                        <postfield name="temperature" value="$(temperature)"/>
-                        <postfield name="max_tokens" value="$(max_tokens)"/>
-                        <postfield name="system_prompt" value="$(system_prompt)"/>
-                    </go>
-                </anchor>
-            </p>
-            <p>
-                <anchor>Удалить чат
-                    <go href="{make_link('/delete_chat', html_mode)}" method="post">
-                        <postfield name="chat_id" value="{chat_id}"/>
-                    </go>
-                </anchor>
-            </p>
-        '''
-    content = form + f'<p><a href="{make_link(f"/chat.wml?id={chat_id}&page=1", html_mode)}">Назад в чат</a></p>'
-    return render_page(content, "Настройки чата", html_mode)
-
-@app.route("/chat_settings", methods=['POST'])
-@login_required
-def save_chat_settings():
-    chat_id = request.form.get('chat_id')
-    model = request.form.get('model', 'deepseek-v4-flash')
-    temperature = float(request.form.get('temperature', 1.0))
-    max_tokens = int(request.form.get('max_tokens', 500))
-    system_prompt = request.form.get('system_prompt', 'Ты — полезный ассистент.')
-    
-    user = get_user_data()
-    chat = get_chat(chat_id)
-    if not chat:
-        return redirect('/chats.wml')
-    
-    chat["settings"] = {
-        "model": model,
-        "temperature": temperature,
-        "max_tokens": max_tokens,
-        "system_prompt": system_prompt
-    }
-    save_user_data(user)
-    html_mode = 'html' in request.args
-    return redirect(make_link(f'/chat.wml?id={chat_id}&page=1', html_mode))
+        cid = request.args.get('id')
+        if not cid:
+            return redirect('/chats.wml')
+        chat = get_chat(cid)
+        if not chat:
+            return redirect('/chats.wml')
+        s = chat["settings"]
+        out = f'''<?xml version="1.0"?>
+<!DOCTYPE wml PUBLIC "-//WAPFORUM//DTD WML 1.1//EN" "http://www.wapforum.org/DTD/wml_1.1.xml">
+<wml><card id="chset" title="Настройки чата"><p>
+<b>Имя:</b><br/><input name="chat_name" value="{chat["name"]}"/><anchor>Переименовать<go href="/rename_chat" method="post"><postfield name="chat_id" value="{cid}"/><postfield name="new_name" value="$(chat_name)"/></go></anchor><br/>
+Модель:<br/><select name="model"><option value="deepseek-v4-flash" {"(selected)" if s["model"]=="deepseek-v4-flash" else ""}>V4 Flash</option><option value="deepseek-v4-pro" {"(selected)" if s["model"]=="deepseek-v4-pro" else ""}>V4 Pro</option></select><br/>
+Температура (0-2):<br/><input name="temperature" value="{s["temperature"]}"/><br/>
+Макс. токенов:<br/><input name="max_tokens" value="{s["max_tokens"]}"/><br/>
+Системный промпт:<br/><input name="system_prompt" value="{s["system_prompt"]}"/><br/>
+<anchor>Сохранить<go href="/chat_settings.wml" method="post"><postfield name="chat_id" value="{cid}"/><postfield name="model" value="$(model)"/><postfield name="temperature" value="$(temperature)"/><postfield name="max_tokens" value="$(max_tokens)"/><postfield name="system_prompt" value="$(system_prompt)"/></go></anchor><br/>
+<anchor>Удалить чат<go href="/delete_chat" method="post"><postfield name="chat_id" value="{cid}"/></go></anchor><br/>
+<a href="/chat.wml?id={cid}&page=1">Назад в чат</a>
+</p></card></wml>'''
+        return out, 200, {'Content-Type': 'text/vnd.wap.wml'}
 
 @app.route("/rename_chat", methods=['POST'])
 @login_required
 def rename_chat():
-    chat_id = request.form.get('chat_id')
+    cid = request.form.get('chat_id')
     new_name = request.form.get('new_name', '').strip()
-    if not chat_id or not new_name:
-        return redirect('/chats.wml')
-    user = get_user_data()
-    chat = get_chat(chat_id)
-    if chat:
-        chat["name"] = new_name
-        save_user_data(user)
-    html_mode = 'html' in request.args
-    return redirect(make_link(f'/chat_settings.wml?id={chat_id}', html_mode))
+    if cid and new_name:
+        chat = get_chat(cid)
+        if chat:
+            chat["name"] = new_name
+            save_user_data(get_user_data())
+    return redirect(f'/chat_settings.wml?id={cid}')
 
 @app.route("/delete_chat", methods=['POST'])
 @login_required
 def delete_chat():
-    chat_id = request.form.get('chat_id')
-    if not chat_id:
-        return redirect('/chats.wml')
-    user = get_user_data()
-    user["chats"] = [c for c in user["chats"] if c["id"] != chat_id]
-    save_user_data(user)
-    html_mode = 'html' in request.args
-    return redirect(make_link('/chats.wml', html_mode))
+    cid = request.form.get('chat_id')
+    if cid:
+        user = get_user_data()
+        user["chats"] = [c for c in user["chats"] if c["id"] != cid]
+        save_user_data(user)
+    return redirect('/chats.wml')
 
-@app.route("/settings.wml")
+# ----- Глобальные настройки -----
+@app.route("/settings.wml", methods=['GET', 'POST'])
 @login_required
-def wml_settings():
-    html_mode = 'html' in request.args
-    user = get_user_data()
-    gs = user["global_settings"]
-    
-    if html_mode:
-        content = f'''
-            <form method="post" action="{make_link('/settings', html_mode)}">
-                <p>Модель по умолчанию:
-                    <select name="model">
-                        <option value="deepseek-v4-flash" {"selected" if gs['model']=='deepseek-v4-flash' else ""}>V4 Flash</option>
-                        <option value="deepseek-v4-pro" {"selected" if gs['model']=='deepseek-v4-pro' else ""}>V4 Pro</option>
-                    </select>
-                </p>
-                <p>Температура (0-2): <input name="temperature" type="text" value="{gs['temperature']}"/></p>
-                <p>Макс. токенов: <input name="max_tokens" type="text" value="{gs['max_tokens']}"/></p>
-                <p>Системный промпт (по умолчанию): <input name="system_prompt" type="text" value="{gs['system_prompt']}"/></p>
-                <button type="submit">Сохранить</button>
-            </form>
-            <form method="post" action="{make_link('/reset_data', html_mode)}" style="margin-top:10px;">
-                <input type="hidden" name="confirm" value="yes"/>
-                <button type="submit" style="background:orange;">Сбросить все данные</button>
-            </form>
-        '''
+def settings():
+    if request.method == 'POST':
+        model = request.form.get('model', 'deepseek-v4-flash')
+        temp = float(request.form.get('temperature', 1.0))
+        max_tok = int(request.form.get('max_tokens', 500))
+        sys_prompt = request.form.get('system_prompt', 'Ты — полезный ассистент.')
+        user = get_user_data()
+        user["global_settings"] = {
+            "model": model,
+            "temperature": temp,
+            "max_tokens": max_tok,
+            "system_prompt": sys_prompt
+        }
+        save_user_data(user)
+        return redirect('/settings.wml')
     else:
-        content = f'''
-            <p>
-                Модель по умолчанию:<br/>
-                <select name="model">
-                    <option value="deepseek-v4-flash" {"(selected)" if gs['model']=='deepseek-v4-flash' else ""}>V4 Flash</option>
-                    <option value="deepseek-v4-pro" {"(selected)" if gs['model']=='deepseek-v4-pro' else ""}>V4 Pro</option>
-                </select>
-            </p>
-            <p>
-                Температура (0-2):<br/>
-                <input name="temperature" type="text" value="{gs['temperature']}" format="*N"/>
-            </p>
-            <p>
-                Макс. токенов:<br/>
-                <input name="max_tokens" type="text" value="{gs['max_tokens']}" format="*N"/>
-            </p>
-            <p>
-                Системный промпт (по умолчанию):<br/>
-                <input name="system_prompt" type="text" value="{gs['system_prompt']}" format="*M"/>
-            </p>
-            <p>
-                <anchor>Сохранить
-                    <go href="{make_link('/settings', html_mode)}" method="post">
-                        <postfield name="model" value="$(model)"/>
-                        <postfield name="temperature" value="$(temperature)"/>
-                        <postfield name="max_tokens" value="$(max_tokens)"/>
-                        <postfield name="system_prompt" value="$(system_prompt)"/>
-                    </go>
-                </anchor>
-            </p>
-            <p>
-                <anchor>Сбросить все данные
-                    <go href="{make_link('/reset_data', html_mode)}" method="post">
-                        <postfield name="confirm" value="yes"/>
-                    </go>
-                </anchor>
-            </p>
-        '''
-    content += f'<p><a href="{make_link("/index.wml", html_mode)}">Главная</a></p>'
-    return render_page(content, "Настройки", html_mode)
-
-@app.route("/settings", methods=['POST'])
-@login_required
-def save_settings():
-    model = request.form.get('model', 'deepseek-v4-flash')
-    temperature = float(request.form.get('temperature', 1.0))
-    max_tokens = int(request.form.get('max_tokens', 500))
-    system_prompt = request.form.get('system_prompt', 'Ты — полезный ассистент.')
-    
-    user = get_user_data()
-    user["global_settings"] = {
-        "model": model,
-        "temperature": temperature,
-        "max_tokens": max_tokens,
-        "system_prompt": system_prompt
-    }
-    save_user_data(user)
-    html_mode = 'html' in request.args
-    return redirect(make_link('/settings.wml', html_mode))
+        user = get_user_data()
+        gs = user["global_settings"]
+        out = f'''<?xml version="1.0"?>
+<!DOCTYPE wml PUBLIC "-//WAPFORUM//DTD WML 1.1//EN" "http://www.wapforum.org/DTD/wml_1.1.xml">
+<wml><card id="settings" title="Настройки"><p>
+Модель по умолчанию:<br/><select name="model"><option value="deepseek-v4-flash" {"(selected)" if gs["model"]=="deepseek-v4-flash" else ""}>V4 Flash</option><option value="deepseek-v4-pro" {"(selected)" if gs["model"]=="deepseek-v4-pro" else ""}>V4 Pro</option></select><br/>
+Температура (0-2):<br/><input name="temperature" value="{gs["temperature"]}"/><br/>
+Макс. токенов:<br/><input name="max_tokens" value="{gs["max_tokens"]}"/><br/>
+Системный промпт:<br/><input name="system_prompt" value="{gs["system_prompt"]}"/><br/>
+<anchor>Сохранить<go href="/settings.wml" method="post"><postfield name="model" value="$(model)"/><postfield name="temperature" value="$(temperature)"/><postfield name="max_tokens" value="$(max_tokens)"/><postfield name="system_prompt" value="$(system_prompt)"/></go></anchor><br/>
+<anchor>Сбросить все данные<go href="/reset_data" method="post"><postfield name="confirm" value="yes"/></go></anchor><br/>
+<a href="/index.wml">Главная</a>
+</p></card></wml>'''
+        return out, 200, {'Content-Type': 'text/vnd.wap.wml'}
 
 @app.route("/reset_data", methods=['POST'])
 @login_required
 def reset_data():
     if request.form.get('confirm') == 'yes':
-        default_data = {
+        default = {
             "user": {
                 "chats": [],
                 "global_settings": {
@@ -608,17 +360,9 @@ def reset_data():
                 }
             }
         }
-        save_data(default_data)
-        html_mode = 'html' in request.args
-        return redirect(make_link('/index.wml', html_mode))
-    else:
-        html_mode = 'html' in request.args
-        return redirect(make_link('/settings.wml', html_mode))
+        save_data(default)
+    return redirect('/settings.wml')
 
-# ---------- Обработчик ошибок ----------
-@app.errorhandler(Exception)
-def handle_exception(e):
-    return f"Ошибка на сервере: {str(e)}", 500
-
+# ---------- Запуск ----------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
