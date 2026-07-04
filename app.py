@@ -76,11 +76,18 @@ def login_required(f):
     wrapper.__name__ = f.__name__
     return wrapper
 
-# ---------- Универсальный рендерер ----------
+# ---------- Универсальный рендерер и хелпер для ссылок ----------
+def make_link(url, html_mode):
+    """Добавляет ?html=1 к ссылке, если включён HTML-режим"""
+    if not html_mode:
+        return url
+    if '?' in url:
+        return url + '&html=1'
+    else:
+        return url + '?html=1'
+
 def render_page(content, title, html_mode=False):
-    """Оборачивает контент в WML или HTML в зависимости от html_mode"""
     if html_mode:
-        # HTML-версия для отладки на ПК
         return f'''<!DOCTYPE html>
 <html>
 <head>
@@ -95,6 +102,7 @@ def render_page(content, title, html_mode=False):
         .nav {{ text-align: center; margin: 10px 0; }}
         .nav a {{ margin: 0 5px; }}
         hr {{ margin: 15px 0; }}
+        .message {{ border-bottom: 1px solid #ddd; padding: 5px 0; }}
     </style>
 </head>
 <body>
@@ -106,7 +114,6 @@ def render_page(content, title, html_mode=False):
 </html>
 ''', 200, {'Content-Type': 'text/html'}
     else:
-        # WML-версия для телефона
         return f'''<?xml version="1.0"?>
 <!DOCTYPE wml PUBLIC "-//WAPFORUM//DTD WML 1.1//EN" "http://www.wapforum.org/DTD/wml_1.1.xml">
 <wml>
@@ -131,22 +138,6 @@ def index():
 @app.route("/login.wml")
 def login_page():
     html_mode = 'html' in request.args
-    content = '''
-        <p align="center">
-            <b>Вход в систему</b><br/>
-            Логин:<br/>
-            <input name="login" type="text" emptyok="false" format="*M"/><br/>
-            Пароль:<br/>
-            <input name="password" type="text" emptyok="false" format="*M"/><br/>
-            <anchor>Войти
-                <go href="/login" method="post">
-                    <postfield name="login" value="$(login)"/>
-                    <postfield name="password" value="$(password)"/>
-                </go>
-            </anchor>
-        </p>
-    '''
-    # Для HTML-режима преобразуем anchor в форму
     if html_mode:
         content = '''
             <form method="post" action="/login">
@@ -154,6 +145,22 @@ def login_page():
                 <p>Пароль: <input name="password" type="text"/></p>
                 <button type="submit">Войти</button>
             </form>
+        '''
+    else:
+        content = '''
+            <p align="center">
+                <b>Вход в систему</b><br/>
+                Логин:<br/>
+                <input name="login" type="text" emptyok="false" format="*M"/><br/>
+                Пароль:<br/>
+                <input name="password" type="text" emptyok="false" format="*M"/><br/>
+                <anchor>Войти
+                    <go href="/login" method="post">
+                        <postfield name="login" value="$(login)"/>
+                        <postfield name="password" value="$(password)"/>
+                    </go>
+                </anchor>
+            </p>
         '''
     return render_page(content, "Вход", html_mode)
 
@@ -165,13 +172,13 @@ def login():
         session.permanent = True
         session["logged_in"] = True
         session["user"] = login
-        return redirect("/index.wml")
+        return redirect("/index.wml" + ('?html=1' if 'html' in request.args else ''))
     else:
         html_mode = 'html' in request.args
-        content = '''
+        content = f'''
             <p align="center">
                 <b>Неверный логин или пароль</b><br/>
-                <a href="/login.wml">Попробовать снова</a>
+                <a href="{make_link('/login.wml', html_mode)}">Попробовать снова</a>
             </p>
         '''
         return render_page(content, "Ошибка", html_mode)
@@ -179,7 +186,8 @@ def login():
 @app.route("/logout")
 def logout():
     session.clear()
-    return redirect("/login.wml")
+    html_mode = 'html' in request.args
+    return redirect(make_link('/login.wml', html_mode))
 
 # ---------- Защищённые страницы ----------
 @app.route("/index.wml")
@@ -191,10 +199,10 @@ def wml_index():
         <p align="center">
             <b>DeepSeek</b><br/>
             Привет, {user}!<br/>
-            <a href="/new_chat">Новый чат</a><br/>
-            <a href="/chats.wml">Чаты</a><br/>
-            <a href="/settings.wml">Настройки</a><br/>
-            <a href="/logout">Выйти</a>
+            <a href="{make_link('/new_chat', html_mode)}">Новый чат</a><br/>
+            <a href="{make_link('/chats.wml', html_mode)}">Чаты</a><br/>
+            <a href="{make_link('/settings.wml', html_mode)}">Настройки</a><br/>
+            <a href="{make_link('/logout', html_mode)}">Выйти</a>
         </p>
     '''
     return render_page(content, "DeepSeek", html_mode)
@@ -205,22 +213,23 @@ def wml_chats():
     html_mode = 'html' in request.args
     user = get_user_data()
     chats = user["chats"]
-    content = '<p><a href="/new_chat">[Новый чат]</a></p>'
+    content = f'<p><a href="{make_link("/new_chat", html_mode)}">[Новый чат]</a></p>'
     if not chats:
         content += '<p>Нет чатов. Создайте первый!</p>'
     else:
         last = chats[0]
-        content += f'<p><a href="/chat.wml?id={last["id"]}&page=1">Последний чат ({last["name"]})</a></p>'
+        content += f'<p><a href="{make_link(f"/chat.wml?id={last["id"]}&page=1", html_mode)}">Последний чат ({last["name"]})</a></p>'
         for chat in chats[1:]:
-            content += f'<p><a href="/chat.wml?id={chat["id"]}&page=1">{chat["name"]}</a></p>'
-    content += '<p><a href="/index.wml">Главная</a></p>'
+            content += f'<p><a href="{make_link(f"/chat.wml?id={chat["id"]}&page=1", html_mode)}">{chat["name"]}</a></p>'
+    content += f'<p><a href="{make_link("/index.wml", html_mode)}">Главная</a></p>'
     return render_page(content, "Чаты", html_mode)
 
 @app.route("/new_chat")
 @login_required
 def new_chat():
     chat_id = create_chat()
-    return redirect(f'/chat.wml?id={chat_id}&page=1')
+    html_mode = 'html' in request.args
+    return redirect(make_link(f'/chat.wml?id={chat_id}&page=1', html_mode))
 
 @app.route("/chat.wml")
 @login_required
@@ -229,10 +238,10 @@ def wml_chat():
     chat_id = request.args.get('id')
     page = int(request.args.get('page', 1))
     if not chat_id:
-        return redirect('/chats.wml')
+        return redirect(make_link('/chats.wml', html_mode))
     chat = get_chat(chat_id)
     if not chat:
-        return redirect('/chats.wml')
+        return redirect(make_link('/chats.wml', html_mode))
     
     messages = chat["messages"]
     total_msgs = len(messages)
@@ -247,20 +256,18 @@ def wml_chat():
     end = min(start + per_page, total_msgs)
     page_msgs = messages[start:end]
     
-    # Навигация
     nav = ''
     if total_pages > 1:
         nav += '<p align="center">'
         if page > 1:
-            nav += f'<a href="/chat.wml?id={chat_id}&page=1"><<</a> '
-            nav += f'<a href="/chat.wml?id={chat_id}&page={page-1}"><</a> '
+            nav += f'<a href="{make_link(f"/chat.wml?id={chat_id}&page=1", html_mode)}"><<</a> '
+            nav += f'<a href="{make_link(f"/chat.wml?id={chat_id}&page={page-1}", html_mode)}"><</a> '
         nav += f'[{page}] '
         if page < total_pages:
-            nav += f'<a href="/chat.wml?id={chat_id}&page={page+1}">></a> '
-            nav += f'<a href="/chat.wml?id={chat_id}&page={total_pages}">>></a>'
+            nav += f'<a href="{make_link(f"/chat.wml?id={chat_id}&page={page+1}", html_mode)}">></a> '
+            nav += f'<a href="{make_link(f"/chat.wml?id={chat_id}&page={total_pages}", html_mode)}">>></a>'
         nav += '</p>'
     
-    # Сообщения
     msg_html = ''
     if not page_msgs:
         msg_html = 'Нет сообщений.'
@@ -270,10 +277,9 @@ def wml_chat():
             text = msg["content"].replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
             msg_html += f'{role}: {text}<br/>'
     
-    # Форма отправки (для WML и HTML разная)
     if html_mode:
         form = f'''
-            <form method="post" action="/chat/send">
+            <form method="post" action="{make_link('/chat/send', html_mode)}">
                 <input type="hidden" name="chat_id" value="{chat_id}"/>
                 <input name="message" type="text" placeholder="Введите сообщение..."/>
                 <button type="submit">Отправить</button>
@@ -283,7 +289,7 @@ def wml_chat():
         form = f'''
             <input name="message" type="text" emptyok="false" format="*M"/>
             <anchor>Отправить
-                <go href="/chat/send" method="post">
+                <go href="{make_link('/chat/send', html_mode)}" method="post">
                     <postfield name="chat_id" value="{chat_id}"/>
                     <postfield name="message" value="$(message)"/>
                 </go>
@@ -295,9 +301,9 @@ def wml_chat():
         <p>{msg_html}</p>
         <p>{form}</p>
         <p>
-            <a href="/chat_settings.wml?id={chat_id}">[Настройки чата]</a>
-            <a href="/chats.wml">[Список чатов]</a>
-            <a href="/index.wml">[Главная]</a>
+            <a href="{make_link(f'/chat_settings.wml?id={chat_id}', html_mode)}">[Настройки чата]</a>
+            <a href="{make_link('/chats.wml', html_mode)}">[Список чатов]</a>
+            <a href="{make_link('/index.wml', html_mode)}">[Главная]</a>
         </p>
         {nav}
     '''
@@ -324,7 +330,8 @@ def send_message():
         save_user_data(user)
         total = len(chat["messages"])
         last_page = (total + 9) // 10
-        return redirect(f'/chat.wml?id={chat_id}&page={last_page}')
+        html_mode = 'html' in request.args
+        return redirect(make_link(f'/chat.wml?id={chat_id}&page={last_page}', html_mode))
     
     settings = chat["settings"]
     system_prompt = settings.get("system_prompt", "Ты — полезный ассистент.")
@@ -358,7 +365,8 @@ def send_message():
     save_user_data(user)
     total = len(chat["messages"])
     last_page = (total + 9) // 10
-    return redirect(f'/chat.wml?id={chat_id}&page={last_page}')
+    html_mode = 'html' in request.args
+    return redirect(make_link(f'/chat.wml?id={chat_id}&page={last_page}', html_mode))
 
 @app.route("/chat_settings.wml")
 @login_required
@@ -366,16 +374,15 @@ def wml_chat_settings():
     html_mode = 'html' in request.args
     chat_id = request.args.get('id')
     if not chat_id:
-        return redirect('/chats.wml')
+        return redirect(make_link('/chats.wml', html_mode))
     chat = get_chat(chat_id)
     if not chat:
-        return redirect('/chats.wml')
+        return redirect(make_link('/chats.wml', html_mode))
     
     s = chat["settings"]
-    # Для HTML-режима используем форму, для WML — anchor с go
     if html_mode:
         form = f'''
-            <form method="post" action="/chat_settings">
+            <form method="post" action="{make_link('/chat_settings', html_mode)}">
                 <input type="hidden" name="chat_id" value="{chat_id}"/>
                 <p>Имя чата: <input name="chat_name" type="text" value="{chat['name']}"/></p>
                 <p>Модель: 
@@ -389,7 +396,7 @@ def wml_chat_settings():
                 <p>Системный промпт: <input name="system_prompt" type="text" value="{s['system_prompt']}"/></p>
                 <button type="submit">Сохранить настройки</button>
             </form>
-            <form method="post" action="/delete_chat" style="margin-top:10px;">
+            <form method="post" action="{make_link('/delete_chat', html_mode)}" style="margin-top:10px;">
                 <input type="hidden" name="chat_id" value="{chat_id}"/>
                 <button type="submit" style="background:red;">Удалить чат</button>
             </form>
@@ -400,7 +407,7 @@ def wml_chat_settings():
                 <b>Имя чата:</b><br/>
                 <input name="chat_name" type="text" value="{chat['name']}" format="*M"/>
                 <anchor>Переименовать
-                    <go href="/rename_chat" method="post">
+                    <go href="{make_link('/rename_chat', html_mode)}" method="post">
                         <postfield name="chat_id" value="{chat_id}"/>
                         <postfield name="new_name" value="$(chat_name)"/>
                     </go>
@@ -427,7 +434,7 @@ def wml_chat_settings():
             </p>
             <p>
                 <anchor>Сохранить настройки
-                    <go href="/chat_settings" method="post">
+                    <go href="{make_link('/chat_settings', html_mode)}" method="post">
                         <postfield name="chat_id" value="{chat_id}"/>
                         <postfield name="model" value="$(model)"/>
                         <postfield name="temperature" value="$(temperature)"/>
@@ -438,13 +445,13 @@ def wml_chat_settings():
             </p>
             <p>
                 <anchor>Удалить чат
-                    <go href="/delete_chat" method="post">
+                    <go href="{make_link('/delete_chat', html_mode)}" method="post">
                         <postfield name="chat_id" value="{chat_id}"/>
                     </go>
                 </anchor>
             </p>
         '''
-    content = form + f'<p><a href="/chat.wml?id={chat_id}&page=1">Назад в чат</a></p>'
+    content = form + f'<p><a href="{make_link(f"/chat.wml?id={chat_id}&page=1", html_mode)}">Назад в чат</a></p>'
     return render_page(content, "Настройки чата", html_mode)
 
 @app.route("/chat_settings", methods=['POST'])
@@ -468,7 +475,8 @@ def save_chat_settings():
         "system_prompt": system_prompt
     }
     save_user_data(user)
-    return redirect(f'/chat.wml?id={chat_id}&page=1')
+    html_mode = 'html' in request.args
+    return redirect(make_link(f'/chat.wml?id={chat_id}&page=1', html_mode))
 
 @app.route("/rename_chat", methods=['POST'])
 @login_required
@@ -482,7 +490,8 @@ def rename_chat():
     if chat:
         chat["name"] = new_name
         save_user_data(user)
-    return redirect(f'/chat_settings.wml?id={chat_id}')
+    html_mode = 'html' in request.args
+    return redirect(make_link(f'/chat_settings.wml?id={chat_id}', html_mode))
 
 @app.route("/delete_chat", methods=['POST'])
 @login_required
@@ -493,7 +502,8 @@ def delete_chat():
     user = get_user_data()
     user["chats"] = [c for c in user["chats"] if c["id"] != chat_id]
     save_user_data(user)
-    return redirect('/chats.wml')
+    html_mode = 'html' in request.args
+    return redirect(make_link('/chats.wml', html_mode))
 
 @app.route("/settings.wml")
 @login_required
@@ -504,7 +514,7 @@ def wml_settings():
     
     if html_mode:
         content = f'''
-            <form method="post" action="/settings">
+            <form method="post" action="{make_link('/settings', html_mode)}">
                 <p>Модель по умолчанию:
                     <select name="model">
                         <option value="deepseek-chat" {"selected" if gs['model']=='deepseek-chat' else ""}>deepseek-chat</option>
@@ -516,7 +526,7 @@ def wml_settings():
                 <p>Системный промпт (по умолчанию): <input name="system_prompt" type="text" value="{gs['system_prompt']}"/></p>
                 <button type="submit">Сохранить</button>
             </form>
-            <form method="post" action="/reset_data" style="margin-top:10px;">
+            <form method="post" action="{make_link('/reset_data', html_mode)}" style="margin-top:10px;">
                 <input type="hidden" name="confirm" value="yes"/>
                 <button type="submit" style="background:orange;">Сбросить все данные</button>
             </form>
@@ -544,7 +554,7 @@ def wml_settings():
             </p>
             <p>
                 <anchor>Сохранить
-                    <go href="/settings" method="post">
+                    <go href="{make_link('/settings', html_mode)}" method="post">
                         <postfield name="model" value="$(model)"/>
                         <postfield name="temperature" value="$(temperature)"/>
                         <postfield name="max_tokens" value="$(max_tokens)"/>
@@ -554,13 +564,13 @@ def wml_settings():
             </p>
             <p>
                 <anchor>Сбросить все данные
-                    <go href="/reset_data" method="post">
+                    <go href="{make_link('/reset_data', html_mode)}" method="post">
                         <postfield name="confirm" value="yes"/>
                     </go>
                 </anchor>
             </p>
         '''
-    content += '<p><a href="/index.wml">Главная</a></p>'
+    content += f'<p><a href="{make_link("/index.wml", html_mode)}">Главная</a></p>'
     return render_page(content, "Настройки", html_mode)
 
 @app.route("/settings", methods=['POST'])
@@ -579,7 +589,8 @@ def save_settings():
         "system_prompt": system_prompt
     }
     save_user_data(user)
-    return redirect('/settings.wml')
+    html_mode = 'html' in request.args
+    return redirect(make_link('/settings.wml', html_mode))
 
 @app.route("/reset_data", methods=['POST'])
 @login_required
@@ -597,9 +608,11 @@ def reset_data():
             }
         }
         save_data(default_data)
-        return redirect('/index.wml')
+        html_mode = 'html' in request.args
+        return redirect(make_link('/index.wml', html_mode))
     else:
-        return redirect('/settings.wml')
+        html_mode = 'html' in request.args
+        return redirect(make_link('/settings.wml', html_mode))
 
 # ---------- Обработчик ошибок ----------
 @app.errorhandler(Exception)
