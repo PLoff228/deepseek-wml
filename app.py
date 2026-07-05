@@ -12,7 +12,6 @@ def load_data():
         with open(DATA_FILE, 'r') as f:
             data = json.load(f)
             print(f"[LOG] load_data: загружено чатов: {len(data.get('user', {}).get('chats', []))}")
-            # выведем количество сообщений в каждом чате
             for chat in data.get('user', {}).get('chats', []):
                 print(f"[LOG]   чат {chat['id']}: {chat.get('name', '')}, сообщений: {len(chat.get('messages', []))}")
             return data
@@ -209,8 +208,13 @@ def send_message():
     if not chat_id or not message:
         return redirect('/chats.wml')
     
+    # ПОЛУЧАЕМ user ОДИН РАЗ
     user = get_user_data()
-    chat = get_chat(chat_id)
+    chat = None
+    for c in user["chats"]:
+        if c["id"] == chat_id:
+            chat = c
+            break
     if not chat:
         print(f"[LOG] send_message: чат {chat_id} не найден")
         return redirect('/chats.wml')
