@@ -12,6 +12,9 @@ def load_data():
         with open(DATA_FILE, 'r') as f:
             data = json.load(f)
             print(f"[LOG] load_data: загружено чатов: {len(data.get('user', {}).get('chats', []))}")
+            # выведем количество сообщений в каждом чате
+            for chat in data.get('user', {}).get('chats', []):
+                print(f"[LOG]   чат {chat['id']}: {chat.get('name', '')}, сообщений: {len(chat.get('messages', []))}")
             return data
     except (FileNotFoundError, json.JSONDecodeError) as e:
         print(f"[LOG] load_data: ошибка или файл не найден, создаём новый: {e}")
@@ -25,7 +28,7 @@ def load_data():
                     "system_prompt": "Ты — полезный ассистент. Отвечай на русском языке."
                 }
             }
-        }
+        
 
 def save_data(data):
     with open(DATA_FILE, 'w') as f:
@@ -39,8 +42,11 @@ def get_user_data():
 def save_user_data(user_data):
     data = load_data()
     data["user"] = user_data
+    print(f"[LOG] save_user_data: перед сохранением, чатов: {len(user_data.get('chats', []))}")
+    for chat in user_data.get('chats', []):
+        print(f"[LOG]   чат {chat['id']}: {chat.get('name', '')}, сообщений: {len(chat.get('messages', []))}")
     save_data(data)
-    print(f"[LOG] save_user_data: чатов после сохранения: {len(user_data.get('chats', []))}")
+    print(f"[LOG] save_user_data: после сохранения, чатов: {len(user_data.get('chats', []))}")
 
 def get_chat(chat_id):
     user = get_user_data()
