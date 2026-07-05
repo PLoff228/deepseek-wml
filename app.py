@@ -108,9 +108,10 @@ def wml_chats():
         content += '<p>Нет чатов. Создайте первый!</p>'
     else:
         last = chats[0]
-        content += f'<p><a href="/chat.wml?id={last["id"]}&page=1">Последний чат ({last["name"]})</a></p>'
+        # URL с &amp; вместо &
+        content += f'<p><a href="/chat.wml?id={last["id"]}&amp;page=1">Последний чат ({last["name"]})</a></p>'
         for chat in chats[1:]:
-            content += f'<p><a href="/chat.wml?id={chat["id"]}&page=1">{chat["name"]}</a></p>'
+            content += f'<p><a href="/chat.wml?id={chat["id"]}&amp;page=1">{chat["name"]}</a></p>'
     content += '<p><a href="/index.wml">Главная</a></p>'
     return render_page(content, "Чаты")
 
@@ -142,16 +143,17 @@ def wml_chat():
     end = min(start + per_page, total_msgs)
     page_msgs = messages[start:end]
     
+    # Навигация с &amp;
     nav = ''
     if total_pages > 1:
         nav += '<p align="center">'
         if page > 1:
-            nav += f'<a href="/chat.wml?id={chat_id}&page=1"><<</a> '
-            nav += f'<a href="/chat.wml?id={chat_id}&page={page-1}"><</a> '
+            nav += f'<a href="/chat.wml?id={chat_id}&amp;page=1"><<</a> '
+            nav += f'<a href="/chat.wml?id={chat_id}&amp;page={page-1}"><</a> '
         nav += f'[{page}] '
         if page < total_pages:
-            nav += f'<a href="/chat.wml?id={chat_id}&page={page+1}">></a> '
-            nav += f'<a href="/chat.wml?id={chat_id}&page={total_pages}">>></a>'
+            nav += f'<a href="/chat.wml?id={chat_id}&amp;page={page+1}">></a> '
+            nav += f'<a href="/chat.wml?id={chat_id}&amp;page={total_pages}">>></a>'
         nav += '</p>'
     
     msg_html = ''
@@ -254,7 +256,6 @@ def wml_chat_settings():
         return redirect('/chats.wml')
     
     s = chat["settings"]
-    # Исправленные опции: selected="selected"
     model_flash_selected = 'selected="selected"' if s['model'] == 'deepseek-v4-flash' else ''
     model_pro_selected = 'selected="selected"' if s['model'] == 'deepseek-v4-pro' else ''
     
@@ -307,7 +308,7 @@ def wml_chat_settings():
             </anchor>
         </p>
         <p>
-            <a href="/chat.wml?id={chat_id}&page=1">Назад в чат</a>
+            <a href="/chat.wml?id={chat_id}&amp;page=1">Назад в чат</a>
         </p>
     '''
     return render_page(content, "Настройки чата")
@@ -361,7 +362,6 @@ def delete_chat():
 def wml_settings():
     user = get_user_data()
     gs = user["global_settings"]
-    # Исправленные опции
     model_flash_selected = 'selected="selected"' if gs['model'] == 'deepseek-v4-flash' else ''
     model_pro_selected = 'selected="selected"' if gs['model'] == 'deepseek-v4-pro' else ''
     
