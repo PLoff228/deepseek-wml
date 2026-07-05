@@ -108,7 +108,6 @@ def wml_chats():
         content += '<p>Нет чатов. Создайте первый!</p>'
     else:
         last = chats[0]
-        # URL с &amp; вместо &
         content += f'<p><a href="/chat.wml?id={last["id"]}&amp;page=1">Последний чат ({last["name"]})</a></p>'
         for chat in chats[1:]:
             content += f'<p><a href="/chat.wml?id={chat["id"]}&amp;page=1">{chat["name"]}</a></p>'
@@ -131,6 +130,8 @@ def wml_chat():
         return redirect('/chats.wml')
     
     messages = chat["messages"]
+    print(f"[LOG] Чат {chat_id}: всего сообщений {len(messages)}, роли: {[m['role'] for m in messages]}")
+    
     total_msgs = len(messages)
     per_page = 10
     total_pages = max(1, (total_msgs + per_page - 1) // per_page)
@@ -143,7 +144,6 @@ def wml_chat():
     end = min(start + per_page, total_msgs)
     page_msgs = messages[start:end]
     
-    # Навигация с &amp;
     nav = ''
     if total_pages > 1:
         nav += '<p align="center">'
@@ -241,9 +241,11 @@ def send_message():
         answer = f"Ошибка сервера: {str(e)}"
     
     chat["messages"].append({"role": "assistant", "content": answer})
+    print(f"[LOG] Сохранён ответ ИИ: {answer[:50]}...")
     save_user_data(user)
     total = len(chat["messages"])
     last_page = (total + 9) // 10
+    print(f"[LOG] Всего сообщений: {total}, последняя страница: {last_page}")
     return redirect(f'/chat.wml?id={chat_id}&page={last_page}')
 
 @app.route("/chat_settings.wml")
