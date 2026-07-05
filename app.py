@@ -232,14 +232,16 @@ def send_message():
         "top_p": 1.0
     }
     
-    try:
-        resp = requests.post("https://api.deepseek.com/chat/completions", headers=headers, json=data, timeout=30)
-        if resp.status_code == 200:
-            answer = resp.json().get("choices", [{}])[0].get("message", {}).get("content", "Нет ответа")
-        else:
-            answer = f"Ошибка API: {resp.status_code}"
-    except Exception as e:
-        answer = f"Ошибка сервера: {str(e)}"
+  try:
+      resp = requests.post(...)
+      print(f"API ответ: статус {resp.status_code}, тело: {resp.text}")
+      if resp.status_code == 200:
+          answer = resp.json().get("choices", [{}])[0].get("message", {}).get("content", "Нет ответа")
+      else:
+          answer = f"Ошибка API: {resp.status_code} - {resp.text}"
+   except Exception as e:
+      print(f"Исключение: {e}")
+      answer = f"Ошибка сервера: {str(e)}"
     
     chat["messages"].append({"role": "assistant", "content": answer})
     save_user_data(user)
