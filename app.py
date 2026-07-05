@@ -65,7 +65,6 @@ def create_chat(name=None):
     save_user_data(user)
     return chat_id
 
-# ---------- Универсальный рендерер ----------
 def render_page(content, title):
     return f'''<?xml version="1.0"?>
 <!DOCTYPE wml PUBLIC "-//WAPFORUM//DTD WML 1.1//EN" "http://www.wapforum.org/DTD/wml_1.1.xml">
@@ -228,7 +227,6 @@ def send_message():
         "top_p": 1.0
     }
     
-    # ===== БЛОК С ЛОГИРОВАНИЕМ =====
     try:
         resp = requests.post("https://api.deepseek.com/chat/completions", headers=headers, json=data, timeout=30)
         print(f"API ответ: статус {resp.status_code}, тело: {resp.text}")
@@ -239,7 +237,6 @@ def send_message():
     except Exception as e:
         print(f"Исключение: {e}")
         answer = f"Ошибка сервера: {str(e)}"
-    # ===== КОНЕЦ БЛОКА =====
     
     chat["messages"].append({"role": "assistant", "content": answer})
     save_user_data(user)
@@ -257,6 +254,10 @@ def wml_chat_settings():
         return redirect('/chats.wml')
     
     s = chat["settings"]
+    # Исправленные опции: selected="selected"
+    model_flash_selected = 'selected="selected"' if s['model'] == 'deepseek-v4-flash' else ''
+    model_pro_selected = 'selected="selected"' if s['model'] == 'deepseek-v4-pro' else ''
+    
     content = f'''
         <p>
             <b>Имя чата:</b><br/>
@@ -271,8 +272,8 @@ def wml_chat_settings():
         <p>
             Модель:<br/>
             <select name="model">
-                <option value="deepseek-v4-flash" {"(selected)" if s['model']=='deepseek-v4-flash' else ""}>V4 Flash</option>
-                <option value="deepseek-v4-pro" {"(selected)" if s['model']=='deepseek-v4-pro' else ""}>V4 Pro</option>
+                <option value="deepseek-v4-flash" {model_flash_selected}>V4 Flash</option>
+                <option value="deepseek-v4-pro" {model_pro_selected}>V4 Pro</option>
             </select>
         </p>
         <p>
@@ -360,12 +361,16 @@ def delete_chat():
 def wml_settings():
     user = get_user_data()
     gs = user["global_settings"]
+    # Исправленные опции
+    model_flash_selected = 'selected="selected"' if gs['model'] == 'deepseek-v4-flash' else ''
+    model_pro_selected = 'selected="selected"' if gs['model'] == 'deepseek-v4-pro' else ''
+    
     content = f'''
         <p>
             Модель по умолчанию:<br/>
             <select name="model">
-                <option value="deepseek-v4-flash" {"(selected)" if gs['model']=='deepseek-v4-flash' else ""}>V4 Flash</option>
-                <option value="deepseek-v4-pro" {"(selected)" if gs['model']=='deepseek-v4-pro' else ""}>V4 Pro</option>
+                <option value="deepseek-v4-flash" {model_flash_selected}>V4 Flash</option>
+                <option value="deepseek-v4-pro" {model_pro_selected}>V4 Pro</option>
             </select>
         </p>
         <p>
@@ -432,7 +437,6 @@ def reset_data():
     else:
         return redirect('/settings.wml')
 
-# ---------- Обработчик ошибок ----------
 @app.errorhandler(Exception)
 def handle_exception(e):
     return f"Ошибка на сервере: {str(e)}", 500
