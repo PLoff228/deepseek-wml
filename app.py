@@ -10,8 +10,11 @@ DATA_FILE = 'data.json'
 def load_data():
     try:
         with open(DATA_FILE, 'r') as f:
-            return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
+            data = json.load(f)
+            print(f"[LOG] load_data: загружено чатов: {len(data.get('user', {}).get('chats', []))}")
+            return data
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        print(f"[LOG] load_data: ошибка или файл не найден, создаём новый: {e}")
         return {
             "user": {
                 "chats": [],
@@ -27,6 +30,7 @@ def load_data():
 def save_data(data):
     with open(DATA_FILE, 'w') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+    print(f"[LOG] save_data: сохранено чатов: {len(data.get('user', {}).get('chats', []))}")
 
 def get_user_data():
     data = load_data()
@@ -36,6 +40,7 @@ def save_user_data(user_data):
     data = load_data()
     data["user"] = user_data
     save_data(data)
+    print(f"[LOG] save_user_data: чатов после сохранения: {len(user_data.get('chats', []))}")
 
 def get_chat(chat_id):
     user = get_user_data()
@@ -123,14 +128,16 @@ def new_chat():
 def wml_chat():
     chat_id = request.args.get('id')
     page = int(request.args.get('page', 1))
+    print(f"[LOG] wml_chat: id={chat_id}, page={page}")
     if not chat_id:
         return redirect('/chats.wml')
     chat = get_chat(chat_id)
     if not chat:
+        print(f"[LOG] wml_chat: чат {chat_id} не найден")
         return redirect('/chats.wml')
     
     messages = chat["messages"]
-    print(f"[LOG] Чат {chat_id}: всего сообщений {len(messages)}, роли: {[m['role'] for m in messages]}")
+    print(f"[LOG] wml_chat: чат {chat_id}, сообщений={len(messages)}, роли: {[m['role'] for m in messages]}")
     
     total_msgs = len(messages)
     per_page = 10
@@ -192,15 +199,18 @@ def wml_chat():
 def send_message():
     chat_id = request.form.get('chat_id')
     message = request.form.get('message', '').strip()
+    print(f"[LOG] send_message: chat_id={chat_id}, message='{message}'")
     if not chat_id or not message:
         return redirect('/chats.wml')
     
     user = get_user_data()
     chat = get_chat(chat_id)
     if not chat:
+        print(f"[LOG] send_message: чат {chat_id} не найден")
         return redirect('/chats.wml')
     
     chat["messages"].append({"role": "user", "content": message})
+    print(f"[LOG] send_message: добавил сообщение пользователя, теперь {len(chat['messages'])} сообщений")
     
     DEEPSEEK_KEY = os.environ.get("DEEPSEEK_API_KEY")
     if not DEEPSEEK_KEY:
@@ -241,11 +251,11 @@ def send_message():
         answer = f"Ошибка сервера: {str(e)}"
     
     chat["messages"].append({"role": "assistant", "content": answer})
-    print(f"[LOG] Сохранён ответ ИИ: {answer[:50]}...")
+    print(f"[LOG] send_message: добавил ответ ИИ, теперь {len(chat['messages'])} сообщений")
     save_user_data(user)
     total = len(chat["messages"])
     last_page = (total + 9) // 10
-    print(f"[LOG] Всего сообщений: {total}, последняя страница: {last_page}")
+    print(f"[LOG] send_message: редирект на страницу {last_page}")
     return redirect(f'/chat.wml?id={chat_id}&page={last_page}')
 
 @app.route("/chat_settings.wml")
