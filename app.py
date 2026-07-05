@@ -1,11 +1,8 @@
 # -*- coding: utf-8 -*-
-from flask import Flask, request, redirect, session, url_for
+from flask import Flask, request, redirect
 import requests, os, json, uuid
-from datetime import timedelta
 
 app = Flask(__name__)
-app.secret_key = "FIXED_SECRET_KEY_FOR_WML"
-app.permanent_session_lifetime = timedelta(days=30)
 
 DATA_FILE = 'data.json'
 
@@ -70,7 +67,6 @@ def create_chat(name=None):
 
 # ---------- Универсальный рендерер ----------
 def render_page(content, title):
-    """Оборачивает контент в WML"""
     return f'''<?xml version="1.0"?>
 <!DOCTYPE wml PUBLIC "-//WAPFORUM//DTD WML 1.1//EN" "http://www.wapforum.org/DTD/wml_1.1.xml">
 <wml>
@@ -80,7 +76,7 @@ def render_page(content, title):
 </wml>
 ''', 200, {'Content-Type': 'text/vnd.wap.wml'}
 
-# ---------- Главная страница (без авторизации) ----------
+# ---------- Роуты ----------
 @app.route("/")
 def index():
     return '''
@@ -232,16 +228,18 @@ def send_message():
         "top_p": 1.0
     }
     
-  try:
-      resp = requests.post(...)
-      print(f"API ответ: статус {resp.status_code}, тело: {resp.text}")
-      if resp.status_code == 200:
-          answer = resp.json().get("choices", [{}])[0].get("message", {}).get("content", "Нет ответа")
-      else:
-          answer = f"Ошибка API: {resp.status_code} - {resp.text}"
-   except Exception as e:
-      print(f"Исключение: {e}")
-      answer = f"Ошибка сервера: {str(e)}"
+    # ===== БЛОК С ЛОГИРОВАНИЕМ =====
+    try:
+        resp = requests.post("https://api.deepseek.com/chat/completions", headers=headers, json=data, timeout=30)
+        print(f"API ответ: статус {resp.status_code}, тело: {resp.text}")
+        if resp.status_code == 200:
+            answer = resp.json().get("choices", [{}])[0].get("message", {}).get("content", "Нет ответа")
+        else:
+            answer = f"Ошибка API: {resp.status_code} - {resp.text}"
+    except Exception as e:
+        print(f"Исключение: {e}")
+        answer = f"Ошибка сервера: {str(e)}"
+    # ===== КОНЕЦ БЛОКА =====
     
     chat["messages"].append({"role": "assistant", "content": answer})
     save_user_data(user)
