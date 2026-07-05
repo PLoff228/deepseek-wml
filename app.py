@@ -28,7 +28,7 @@ def load_data():
                     "system_prompt": "Ты — полезный ассистент. Отвечай на русском языке."
                 }
             }
-        
+        }
 
 def save_data(data):
     with open(DATA_FILE, 'w') as f:
