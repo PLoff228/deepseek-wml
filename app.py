@@ -109,9 +109,10 @@ AI: {assistant_msg}
             {"role": "system", "content": "Ты — помощник, который придумывает краткие названия для чатов."},
             {"role": "user", "content": prompt}
         ],
-        "max_tokens": 20,
+        "max_tokens": 30,
         "temperature": 0.3,
-        "stream": False
+        "stream": False,
+        "thinking": {"type": "disabled"}  # <-- ОТКЛЮЧАЕМ reasoning
     }
     try:
         resp = requests.post("https://api.deepseek.com/chat/completions", headers=headers, json=data, timeout=10)
