@@ -115,6 +115,7 @@ AI: {assistant_msg}
     }
     try:
         resp = requests.post("https://api.deepseek.com/chat/completions", headers=headers, json=data, timeout=10)
+        print(f"[LOG] generate_chat_name: статус {resp.status_code}, тело: {resp.text}")
         if resp.status_code == 200:
             name = resp.json().get("choices", [{}])[0].get("message", {}).get("content", "").strip()
             # Обрезаем лишние кавычки или точки
@@ -122,7 +123,10 @@ AI: {assistant_msg}
             if name:
                 print(f"[LOG] generate_chat_name: сгенерировано название: {name}")
                 return name
-        print(f"[LOG] generate_chat_name: ошибка API, статус {resp.status_code}")
+            else:
+                print("[LOG] generate_chat_name: ответ пустой")
+        else:
+            print(f"[LOG] generate_chat_name: ошибка API, статус {resp.status_code}")
     except Exception as e:
         print(f"[LOG] generate_chat_name: исключение {e}")
     return None
