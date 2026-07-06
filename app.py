@@ -1,13 +1,12 @@
 # -*- coding: utf-8 -*-
 from flask import Flask, request, redirect
-import requests, os, json, uuid
-import traceback
+import requests, os, json, uuid, time, traceback
 
 app = Flask(__name__)
 
 DATA_FILE = 'data.json'
 
-# ---------- Вспомогательные функции с логами ----------
+# ---------- Вспомогательные функции ----------
 def load_data():
     try:
         with open(DATA_FILE, 'r') as f:
@@ -61,7 +60,11 @@ def create_chat(name=None):
     chat_num = len(user["chats"]) + 1
     chat_name = name or f"Чат {chat_num}"
     chat_id = "chat_" + str(uuid.uuid4())[:8]
-    print(f"[LOG] create_chat: создаём новый чат id={chat_id}, имя={chat_name}")
+    print(f"[LOG] create_chat: ВЫЗВАН в {time.time()}, создаём id={chat_id}, имя={chat_name}")
+    # Добавим трассировку стека, чтобы видеть, откуда вызвано
+    import traceback
+    stack = traceback.format_stack()
+    print(f"[LOG] create_chat: стек вызовов:\n{''.join(stack[-5:])}")
     new_chat = {
         "id": chat_id,
         "name": chat_name,
@@ -178,7 +181,11 @@ def wml_chats():
 
 @app.route("/new_chat")
 def new_chat():
-    print("[LOG] new_chat: вызван роут /new_chat")
+    # МАКСИМАЛЬНОЕ ЛОГИРОВАНИЕ
+    print(f"[LOG] new_chat: ВЫЗВАН в {time.time()}")
+    print(f"[LOG] new_chat: заголовки: {dict(request.headers)}")
+    print(f"[LOG] new_chat: remote_addr={request.remote_addr}, user_agent={request.headers.get('User-Agent')}")
+    print(f"[LOG] new_chat: стек вызовов:\n{''.join(traceback.format_stack()[-5:])}")
     chat_id = create_chat()
     print(f"[LOG] new_chat: создан чат {chat_id}, редирект на /chat.wml")
     return redirect(f'/chat.wml?id={chat_id}&page=1')
@@ -229,7 +236,6 @@ def wml_chat():
         for msg in page_msgs:
             role = "User" if msg["role"] == "user" else "AI"
             text = msg["content"].replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-            # Ограничим длину текста для теста? Нет, покажем полностью
             msg_html += f'{role}: {text}<br/>'
     
     form = f'''
@@ -344,7 +350,7 @@ def send_message():
     print(f"[LOG] send_message: редирект на страницу {last_page} чата {chat_id}")
     return redirect(f'/chat.wml?id={chat_id}&page={last_page}')
 
-# ---------- Остальные роуты (без изменений, но с логами по желанию) ----------
+# ---------- Остальные роуты (без изменений) ----------
 @app.route("/chat_settings.wml")
 def wml_chat_settings():
     chat_id = request.args.get('id')
