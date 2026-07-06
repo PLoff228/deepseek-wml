@@ -12,11 +12,9 @@ def load_data():
         with open(DATA_FILE, 'r') as f:
             data = json.load(f)
             print(f"[LOG] load_data: загружено чатов: {len(data.get('user', {}).get('chats', []))}")
-            for chat in data.get('user', {}).get('chats', []):
-                print(f"[LOG]   чат {chat['id']}: {chat.get('name', '')}, сообщений: {len(chat.get('messages', []))}")
             return data
-    except (FileNotFoundError, json.JSONDecodeError) as e:
-        print(f"[LOG] load_data: ошибка или файл не найден, создаём новый: {e}")
+    except (FileNotFoundError, json.JSONDecodeError):
+        print("[LOG] load_data: файл не найден или битый, создаём новый")
         return {
             "user": {
                 "chats": [],
@@ -41,11 +39,7 @@ def get_user_data():
 def save_user_data(user_data):
     data = load_data()
     data["user"] = user_data
-    print(f"[LOG] save_user_data: перед сохранением, чатов: {len(user_data.get('chats', []))}")
-    for chat in user_data.get('chats', []):
-        print(f"[LOG]   чат {chat['id']}: {chat.get('name', '')}, сообщений: {len(chat.get('messages', []))}")
     save_data(data)
-    print(f"[LOG] save_user_data: после сохранения, чатов: {len(user_data.get('chats', []))}")
 
 def get_chat(chat_id):
     user = get_user_data()
@@ -84,6 +78,54 @@ def render_page(content, title):
   </card>
 </wml>
 ''', 200, {'Content-Type': 'text/vnd.wap.wml'}
+
+# ---------- Функция генерации названия чата ----------
+def generate_chat_name(user_msg, assistant_msg):
+    """
+    Отправляет запрос к DeepSeek для генерации названия чата (3-4 слова).
+    Возвращает строку с названием или None при ошибке.
+    """
+    api_key = os.environ.get("DEEPSEEK_API_KEY")
+    if not api_key:
+        print("[LOG] generate_chat_name: API ключ не настроен")
+        return None
+
+    prompt = f"""
+Ты — помощник, который придумывает краткие названия для чатов. На основе диалога (первое сообщение пользователя и ответ модели) придумай название чата из 3-4 слов. Название должно отражать суть разговора, быть кратким и ёмким. Не ломай четвёртую стену, не обращайся к пользователю, просто выдай название. Выводи только название, без кавычек и лишнего текста.
+
+Диалог:
+User: {user_msg}
+AI: {assistant_msg}
+
+Название:
+"""
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    data = {
+        "model": "deepseek-v4-flash",
+        "messages": [
+            {"role": "system", "content": "Ты — помощник, который придумывает краткие названия для чатов."},
+            {"role": "user", "content": prompt}
+        ],
+        "max_tokens": 20,
+        "temperature": 0.3,
+        "stream": False
+    }
+    try:
+        resp = requests.post("https://api.deepseek.com/chat/completions", headers=headers, json=data, timeout=10)
+        if resp.status_code == 200:
+            name = resp.json().get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+            # Обрезаем лишние кавычки или точки
+            name = name.strip('"').strip("'").strip('.')
+            if name:
+                print(f"[LOG] generate_chat_name: сгенерировано название: {name}")
+                return name
+        print(f"[LOG] generate_chat_name: ошибка API, статус {resp.status_code}")
+    except Exception as e:
+        print(f"[LOG] generate_chat_name: исключение {e}")
+    return None
 
 # ---------- Роуты ----------
 @app.route("/")
@@ -133,17 +175,13 @@ def new_chat():
 def wml_chat():
     chat_id = request.args.get('id')
     page = int(request.args.get('page', 1))
-    print(f"[LOG] wml_chat: id={chat_id}, page={page}")
     if not chat_id:
         return redirect('/chats.wml')
     chat = get_chat(chat_id)
     if not chat:
-        print(f"[LOG] wml_chat: чат {chat_id} не найден")
         return redirect('/chats.wml')
     
     messages = chat["messages"]
-    print(f"[LOG] wml_chat: чат {chat_id}, сообщений={len(messages)}, роли: {[m['role'] for m in messages]}")
-    
     total_msgs = len(messages)
     per_page = 10
     total_pages = max(1, (total_msgs + per_page - 1) // per_page)
@@ -204,11 +242,9 @@ def wml_chat():
 def send_message():
     chat_id = request.form.get('chat_id')
     message = request.form.get('message', '').strip()
-    print(f"[LOG] send_message: chat_id={chat_id}, message='{message}'")
     if not chat_id or not message:
         return redirect('/chats.wml')
     
-    # ПОЛУЧАЕМ user ОДИН РАЗ
     user = get_user_data()
     chat = None
     for c in user["chats"]:
@@ -216,11 +252,10 @@ def send_message():
             chat = c
             break
     if not chat:
-        print(f"[LOG] send_message: чат {chat_id} не найден")
         return redirect('/chats.wml')
     
+    # Добавляем сообщение пользователя
     chat["messages"].append({"role": "user", "content": message})
-    print(f"[LOG] send_message: добавил сообщение пользователя, теперь {len(chat['messages'])} сообщений")
     
     DEEPSEEK_KEY = os.environ.get("DEEPSEEK_API_KEY")
     if not DEEPSEEK_KEY:
@@ -251,21 +286,30 @@ def send_message():
     
     try:
         resp = requests.post("https://api.deepseek.com/chat/completions", headers=headers, json=data, timeout=30)
-        print(f"API ответ: статус {resp.status_code}, тело: {resp.text}")
         if resp.status_code == 200:
             answer = resp.json().get("choices", [{}])[0].get("message", {}).get("content", "Нет ответа")
         else:
             answer = f"Ошибка API: {resp.status_code} - {resp.text}"
     except Exception as e:
-        print(f"Исключение: {e}")
         answer = f"Ошибка сервера: {str(e)}"
     
     chat["messages"].append({"role": "assistant", "content": answer})
-    print(f"[LOG] send_message: добавил ответ ИИ, теперь {len(chat['messages'])} сообщений")
+    
+    # --- Генерация названия, если это первый обмен в чате ---
+    is_first_exchange = (len(chat["messages"]) == 2)  # 2 сообщения: user + assistant
+    is_default_name = chat["name"].startswith("Чат ") or chat["name"].startswith("Chat ")
+    if is_first_exchange and is_default_name:
+        # Берём первое сообщение пользователя и ответ ИИ
+        user_msg = chat["messages"][0]["content"]
+        assistant_msg = chat["messages"][1]["content"]
+        new_name = generate_chat_name(user_msg, assistant_msg)
+        if new_name:
+            chat["name"] = new_name
+            print(f"[LOG] send_message: чат переименован в '{new_name}'")
+    
     save_user_data(user)
     total = len(chat["messages"])
     last_page = (total + 9) // 10
-    print(f"[LOG] send_message: редирект на страницу {last_page}")
     return redirect(f'/chat.wml?id={chat_id}&page={last_page}')
 
 @app.route("/chat_settings.wml")
