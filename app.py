@@ -181,11 +181,19 @@ def wml_chats():
 
 @app.route("/new_chat")
 def new_chat():
-    # МАКСИМАЛЬНОЕ ЛОГИРОВАНИЕ
     print(f"[LOG] new_chat: ВЫЗВАН в {time.time()}")
     print(f"[LOG] new_chat: заголовки: {dict(request.headers)}")
     print(f"[LOG] new_chat: remote_addr={request.remote_addr}, user_agent={request.headers.get('User-Agent')}")
     print(f"[LOG] new_chat: стек вызовов:\n{''.join(traceback.format_stack()[-5:])}")
+    
+    user = get_user_data()
+    # Если уже есть чаты, редиректим на последний (самый новый)
+    if user["chats"]:
+        last_chat = user["chats"][0]
+        print(f"[LOG] new_chat: чаты уже есть, редирект на {last_chat['id']} ({last_chat['name']})")
+        return redirect(f'/chat.wml?id={last_chat["id"]}&page=1')
+    
+    # Иначе создаём новый
     chat_id = create_chat()
     print(f"[LOG] new_chat: создан чат {chat_id}, редирект на /chat.wml")
     return redirect(f'/chat.wml?id={chat_id}&page=1')
